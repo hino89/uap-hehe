@@ -1,0 +1,232 @@
+#include <LiquidCrystal_I2C.h>
+#include <DHT.h>
+
+// Definisi pin
+#define PIN_DHT 7
+#define TIPE_DHT DHT22
+#define PIN_LDR A0
+
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Alamat I2C 0x27, LCD 16x2
+
+// Sensor DHT
+DHT dht(PIN_DHT, TIPE_DHT);
+
+// Variabel
+float suhu = 0;
+float kelembapan = 0;
+int nilaiCahaya = 0;
+int kecerahan = 0;
+
+// Kontrol tampilan
+unsigned long waktuSebelumnya = 0;
+const long intervalTampilan = 3000; // 3 detik per halaman
+int halamanSekarang = 0;
+const int totalHalaman = 3;
+
+void setup() {
+  // Inisialisasi komunikasi serial
+  Serial.begin(9600);
+  
+  // Inisialisasi LCD
+  lcd.begin(16, 2);
+  lcd.clear();
+  
+  // Inisialisasi sensor DHT
+  dht.begin();
+  
+  // Tampilkan pesan selamat datang
+  lcd.setCursor(0, 0);
+  lcd.print("Sistem..");
+  lcd.setCursor(0, 1);
+  lcd.print("  Smart Farming  ");
+  delay(2000);
+  lcd.clear();
+  
+}
+
+void loop() {
+  // Baca sensor
+  bacaSensor();
+  
+  // Perbarui tampilan berdasarkan timer
+  unsigned long waktuSekarang = millis();
+  if (waktuSekarang - waktuSebelumnya >= intervalTampilan) {
+    waktuSebelumnya = waktuSekarang;
+    
+    // Pindah ke halaman berikutnya
+    halamanSekarang = (halamanSekarang + 1) % totalHalaman;
+    perbaruiTampilan();
+  }
+  
+  // Cetak ke serial untuk monitoring
+  cetakKeSerial();
+  
+  // Cek kondisi pertanian
+  cekKondisiPertanian();
+  
+  delay(1000); // Delay 1 detik
+}
+
+void bacaSensor() {
+  // Baca suhu dan kelembapan
+  suhu = dht.readTemperature();
+  kelembapan = dht.readHumidity();
+  
+  // Baca sensor cahaya
+  nilaiCahaya = analogRead(PIN_LDR);
+  kecerahan = map(nilaiCahaya, 0, 1023, 0, 100); // Konversi ke persentase
+  
+  // Cek apakah pembacaan DHT valid
+  if (isnan(suhu) || isnan(kelembapan)) {
+    Serial.println("Gagal membaca sensor DHT!");
+    suhu = 0;
+    kelembapan = 0;
+  }
+}
+
+void perbaruiTampilan() {
+  lcd.clear();
+  
+  switch(halamanSekarang) {
+    case 0:
+      // Halaman 1: Pesan selamat datang
+      lcd.setCursor(0, 0);
+      lcd.print("     SMART    ");
+      lcd.setCursor(0, 1);
+      lcd.print("     FARMING     ");
+      break;
+      
+    case 1:
+      // Halaman 2: Suhu dan Kelembapan
+      lcd.setCursor(0, 0);
+      lcd.print("Suhu: ");
+      lcd.print(suhu, 1);
+      lcd.print((char)223); // Simbol derajat
+      lcd.print("C");
+      
+      lcd.setCursor(0, 1);
+      lcd.print("Lembap: ");
+      lcd.print(kelembapan, 1);
+      lcd.print("%");
+      break;
+      
+    case 2:
+      // Halaman 3: Kecerahan
+      lcd.setCursor(0, 0);
+      lcd.print("Kecerahan:");
+      
+      lcd.setCursor(0, 1);
+      lcd.print(kecerahan);
+      lcd.print("% ");
+      
+      // Tambahkan indikator kecerahan
+      if (kecerahan >= 80) {
+        lcd.print("Sangat Terang");
+      } else if (kecerahan >= 60) {
+        lcd.print("Terang");
+      } else if (kecerahan >= 40) {
+        lcd.print("Sedang");
+      } else if (kecerahan >= 20) {
+        lcd.print("Redup");
+      } else {
+        lcd.print("Gelap");
+      }
+      break;
+  }
+}
+
+void cetakKeSerial() {
+  Serial.print("Suhu: ");
+  Serial.print(suhu);
+  Serial.print("°C | Kelembapan: ");
+  Serial.print(kelembapan);
+  Serial.print("% | Cahaya: ");
+  Serial.print(nilaiCahaya);
+  Serial.print(" (");
+  Serial.print(kecerahan);
+  Serial.println("%)");
+}
+
+// Fungsi untuk mengganti halaman secara manual (bisa digunakan dengan tombol)
+void halamanBerikutnya() {
+  halamanSekarang = (halamanSekarang + 1) % totalHalaman;
+  perbaruiTampilan();
+  waktuSebelumnya = millis(); // Reset timer
+}
+
+// Fungsi untuk mendapatkan pembacaan sensor saat ini
+void dapatkanPembacaanSekarang(float &temp, float &lembap, int &cahaya) {
+  temp = suhu;
+  lembap = kelembapan;
+  cahaya = kecerahan;
+}
+
+// Fungsi untuk logika pertanian tambahan (bisa dikembangkan)
+void cekKondisiPertanian() {
+  // Cek suhu
+  if (suhu > 35) {
+    Serial.println("PERINGATAN: Suhu terlalu tinggi!");
+    Serial.println("Saran: Tambah ventilasi atau penyiraman");
+  } else if (suhu < 10) {
+    Serial.println("PERINGATAN: Suhu terlalu rendah!");
+    Serial.println("Saran: Gunakan pemanas atau greenhouse");
+  }
+  
+  // Cek kelembapan
+  if (kelembapan > 80) {
+    Serial.println("PERINGATAN: Kelembapan terlalu tinggi!");
+    Serial.println("Saran: Tingkatkan sirkulasi udara");
+  } else if (kelembapan < 30) {
+    Serial.println("PERINGATAN: Kelembapan terlalu rendah!");
+    Serial.println("Saran: Tambah penyiraman atau humidifier");
+  }
+  
+  // Cek cahaya
+  if (kecerahan < 20) {
+    Serial.println("PERINGATAN: Tingkat cahaya terlalu rendah!");
+    Serial.println("Saran: Tambah lampu LED grow light");
+  }
+}
+
+// Fungsi untuk mendapatkan status kondisi pertanian
+String dapatkanStatusPertanian() {
+  if (suhu >= 20 && suhu <= 30 && 
+      kelembapan >= 40 && kelembapan <= 70 && 
+      kecerahan >= 60) {
+    return "OPTIMAL";
+  } else if (suhu >= 15 && suhu <= 35 && 
+             kelembapan >= 30 && kelembapan <= 80 && 
+             kecerahan >= 40) {
+    return "BAIK";
+  } else {
+    return "PERLU PERHATIAN";
+  }
+}
+
+// Fungsi untuk rekomendasi berdasarkan kondisi
+void berikanRekomendasi() {
+  String status = dapatkanStatusPertanian();
+  
+  Serial.print("Status Pertanian: ");
+  Serial.println(status);
+  
+  if (status == "PERLU PERHATIAN") {
+    Serial.println("=== REKOMENDASI ===");
+    
+    if (suhu > 30) {
+      Serial.println("- Kurangi suhu dengan penyiraman atau ventilasi");
+    }
+    if (suhu < 20) {
+      Serial.println("- Tingkatkan suhu dengan greenhouse atau mulsa");
+    }
+    if (kelembapan > 70) {
+      Serial.println("- Kurangi kelembapan dengan drainase yang baik");
+    }
+    if (kelembapan < 40) {
+      Serial.println("- Tingkatkan kelembapan dengan penyiraman teratur");
+    }
+    if (kecerahan < 60) {
+      Serial.println("- Tambah pencahayaan atau pindah ke area lebih terang");
+    }
+  }
+}
