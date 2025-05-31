@@ -1,0 +1,64 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+const int pirPin = 3;   // Pin sensor PIR
+const int ledPin = 5;   // Pin LED
+
+bool lampuNyala = false;     // Status lampu
+bool statusGerakanSebelumnya = LOW; // Untuk deteksi perubahan status gerakan
+
+void setup() {
+  pinMode(pirPin, INPUT);
+  pinMode(ledPin, OUTPUT);
+  Serial.begin(115200);
+
+  // Initialize LCD I2C
+  lcd.init();
+  lcd.backlight();
+
+  // Tampilkan pesan startup
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("  SMART HOME    ");
+  lcd.setCursor(0, 1);
+  lcd.print("     LAMPU      ");
+  
+  delay(2000); // Tampilkan pesan startup selama 2 detik
+  
+  // Tampilkan status awal
+  updateLCDStatus();
+}
+
+void loop() {
+  bool gerakanTerdeteksi = digitalRead(pirPin);
+  Serial.print("Gerakan saat ini: ");
+  Serial.println(gerakanTerdeteksi);
+
+  // Cek apakah terjadi perubahan dari tidak ada gerakan → ada gerakan
+  if (gerakanTerdeteksi == HIGH && statusGerakanSebelumnya == LOW) {
+    lampuNyala = !lampuNyala; // Toggle status lampu
+    digitalWrite(ledPin, lampuNyala ? HIGH : LOW);
+    Serial.println(lampuNyala ? "Lampu MENYALA" : "Lampu MATI");
+    
+    // Update tampilan LCD
+    updateLCDStatus();
+  }
+
+  // Simpan status gerakan untuk loop berikutnya
+  statusGerakanSebelumnya = gerakanTerdeteksi;
+
+  delay(100); // Delay untuk debounce dan stabilitas
+}
+
+void updateLCDStatus() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Status Lampu:");
+  lcd.setCursor(0, 1);
+  if (lampuNyala) {
+    lcd.print(">>> MENYALA <<<");
+  } else {
+    lcd.print(">>>  MATI   <<<");
+  }
+}
