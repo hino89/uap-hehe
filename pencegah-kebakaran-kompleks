@@ -1,0 +1,134 @@
+#include <DHT.h>
+#include <LiquidCrystal_I2C.h>
+
+// Definisi pin
+#define DHTPIN 7        // Pin data DHT22 terhubung ke pin 2
+#define DHTTYPE DHT22   // Tipe sensor
+#define LED_RED 5           // LED pada pin 5
+#define LED_BLUE 4 
+#define BUZZER 3        // Buzzer pada pin 6
+#define MQ2_PIN A0 
+
+DHT dht(DHTPIN, DHTTYPE);
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Alamat I2C LCD biasanya 0x27
+
+// Variabel untuk kontrol tampilan
+unsigned long previousMillis = 0;
+const long interval = 3000; // Interval pergantian halaman (3 detik)
+bool showMainPage = true;
+
+void setup() {
+  Serial.begin(9600);
+  
+  // Inisialisasi sensor dan komponen
+  dht.begin();
+  lcd.init();
+  lcd.backlight();
+
+  // Setup pin mode
+  pinMode(LED_RED, OUTPUT);
+  pinMode(LED_BLUE, OUTPUT);
+  pinMode(BUZZER, OUTPUT);
+  pinMode(MQ2_PIN, INPUT);
+
+  // Tampilan awal
+  lcd.setCursor(0, 0);
+  lcd.print("PENCEGAH");
+  lcd.setCursor(0, 1);
+  lcd.print("KEBAKARAN");
+  delay(2000);
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+  
+  // Baca sensor
+  float temperature = dht.readTemperature();
+  int gasValue = analogRead(MQ2_PIN);
+  
+  // Tampilkan data di Serial Monitor
+  Serial.print("Suhu: ");
+  Serial.print(temperature);
+  Serial.println(" °C");
+  Serial.print("Gas: ");
+  Serial.println(gasValue);
+  
+  // Cek kondisi bahaya
+  bool tempDanger = (temperature > 32);
+  bool gasDanger = (gasValue > 700);
+  
+  // Tampilan LCD
+  if (tempDanger) {
+    // Tampilkan peringatan suhu tinggi
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("SUHU TINGGI");
+    lcd.setCursor(0, 1);
+    lcd.print("!!!BAHAYA API!!!");
+    
+    // Aktifkan alarm
+    digitalWrite(LED_RED, HIGH);
+    fireAlarm();
+    
+    Serial.println("BAHAYA - SUHU TINGGI!!!");
+  }
+  else if (gasDanger) {
+    // Tampilkan peringatan kebocoran gas
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("KEBOCORAN");
+    lcd.setCursor(0, 1);
+    lcd.print("!!!BAHAYA API!!!");
+    
+    // Aktifkan alarm
+    digitalWrite(LED_BLUE, HIGH);
+    fireAlarm();
+    
+    Serial.println("BAHAYA - KEBOCORAN GAS!!!");
+  }
+  else {
+    // Kondisi normal - tampilkan data bergantian
+    digitalWrite(LED_RED, LOW);
+    digitalWrite(LED_BLUE, LOW);
+    
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;
+      showMainPage = !showMainPage;
+      
+      lcd.clear();
+      if (showMainPage) {
+        // Halaman utama
+        lcd.setCursor(0, 0);
+        lcd.print("PENCEGAH");
+        lcd.setCursor(0, 1);
+        lcd.print("KEBAKARAN");
+      } else {
+        // Halaman data sensor
+        lcd.setCursor(0, 0);
+        lcd.print("SUHU: ");
+        lcd.print(temperature, 1);
+        lcd.print("C");
+        
+        lcd.setCursor(0, 1);
+        lcd.print("GAS: ");
+        lcd.print(gasValue);
+      }
+    }
+    
+    Serial.println("KONDISI NORMAL");
+  }
+  
+  Serial.println("=============");
+  delay(500);
+}
+
+void fireAlarm() {
+  // Alarm dengan nada bergantian
+  for (int i = 0; i < 3; i++) {
+    tone(BUZZER, 1000);  // Nada rendah
+    delay(200);
+    tone(BUZZER, 1500);  // Nada tinggi
+    delay(200);
+  }
+  noTone(BUZZER);
+}
