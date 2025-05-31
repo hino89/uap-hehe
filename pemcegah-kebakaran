@@ -1,0 +1,77 @@
+#include <DHT.h>
+#include <LiquidCrystal_I2C.h>
+
+// Definisi pin
+#define DHTPIN 7        // Pin data DHT22 terhubung ke pin 2
+#define DHTTYPE DHT22   // Tipe sensor
+#define LED 5           // LED pada pin 5
+#define BUZZER 3        // Buzzer pada pin 6
+
+DHT dht(DHTPIN, DHTTYPE);
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Alamat I2C 0x27, LCD 16x2
+
+void setup() {
+  Serial.begin(9600);
+  dht.begin();
+  
+  // Inisialisasi LCD
+  lcd.init();
+  lcd.backlight();
+  
+  pinMode(LED, OUTPUT);
+  pinMode(BUZZER, OUTPUT);
+  
+  // Tampil pesan awal di LCD
+  lcd.setCursor(0, 0);
+  lcd.print("Pencegahan");
+  lcd.setCursor(0, 1);
+  lcd.print("Kebakaran");
+  delay(2000);
+  lcd.clear();
+}
+
+void loop() {
+  delay(500); // Delay 500ms antar pembacaan
+
+  float temperature = dht.readTemperature(); // Baca suhu dalam Celsius
+
+  // Tampilkan di Serial Monitor
+  Serial.print("Suhu: ");
+  Serial.print(temperature);
+  Serial.println(" °C");
+
+  // Tampilkan suhu di LCD
+  lcd.setCursor(0, 0);
+  lcd.print("Suhu: ");
+  lcd.print(temperature, 1);
+  lcd.print(" C    "); // Spasi untuk clear karakter lama
+
+  if (temperature > 32) {
+    Serial.println("BAHAYA API!!!");
+    
+    // Tampil peringatan di LCD
+    lcd.setCursor(0, 1);
+    lcd.print("BAHAYA API!!!   ");
+    
+    // Alarm buzzer dan LED
+    for (int i = 0; i < 5; i++) {
+      tone(BUZZER, 1000);  // Nada 1000 Hz
+      digitalWrite(LED, HIGH);
+      delay(250);
+      tone(BUZZER, 1500);  // Nada 1500 Hz
+      digitalWrite(LED, LOW);
+      delay(250);
+    }
+    noTone(BUZZER);
+  } 
+  else {
+    digitalWrite(LED, LOW);
+    Serial.println("TIDAK ADA API");
+    
+    // Tampil status normal di LCD
+    lcd.setCursor(0, 1);
+    lcd.print("Status: NORMAL  ");
+  } 
+  
+  Serial.println("=============");
+}
