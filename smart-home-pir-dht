@@ -1,0 +1,184 @@
+#include <DHT.h>
+#include <Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// Pin definitions
+const int pirPin = 4;        // Pin sensor PIR
+const int ledPin = 5;        // Pin LED
+const int dhtPin = 7;        // Pin sensor DHT22
+const int servoPin = 3;      // Pin servo
+
+// DHT sensor setup
+#define DHTTYPE DHT22
+DHT dht(dhtPin, DHTTYPE);
+
+// Servo setup
+Servo myServo;
+
+// LCD I2C setup (alamat biasanya 0x27 atau 0x3F)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Variables
+bool lampuNyala = false;
+bool statusGerakanSebelumnya = LOW;
+bool jendelaTerbuka = false;   // Status jendela (false = tertutup, true = terbuka)
+float suhuSebelumnya = 0;
+unsigned long waktuTerakhirUpdate = 0;
+unsigned long waktuTampilPesan = 0;
+bool tampilkanPesanKhusus = false;
+int halamanLCD = 1;  // 1 = halaman utama, 2 = halaman sensor
+
+// Konstanta
+const float SUHU_BATAS = 32.0;     // Batas suhu dalam Celsius
+const int SERVO_TERTUTUP = 0;      // Posisi servo tertutup (0 derajat)
+const int SERVO_TERBUKA = 90;      // Posisi servo terbuka (90 derajat)
+const unsigned long INTERVAL_UPDATE = 3000;  // Update halaman setiap 3 detik
+const unsigned long DURASI_PESAN = 2000;     // Durasi pesan khusus 2 detik
+
+void setup() {
+  pinMode(pirPin, INPUT);
+  pinMode(ledPin, OUTPUT);
+  
+  // Initialize DHT sensor
+  dht.begin();
+  
+  // Initialize servo
+  myServo.attach(servoPin);
+  myServo.write(SERVO_TERTUTUP);  // Mulai dengan jendela tertutup
+  
+  // Initialize LCD I2C
+  lcd.init();
+  lcd.backlight();
+  
+  Serial.begin(115200);
+  Serial.println("Sistem dimulai - Jendela dalam posisi tertutup");
+  
+  // Tampilkan pesan startup
+  lcd.setCursor(0, 0);
+  lcd.print("  SMART HOME    ");
+  lcd.setCursor(0, 1);
+  lcd.print("LAMPU & JENDELA");
+  
+  delay(2000); // Delay untuk stabilisasi sensor
+  waktuTerakhirUpdate = millis();
+}
+
+void loop() {
+  unsigned long waktuSekarang = millis();
+  
+  // Baca sensor PIR
+  bool gerakanTerdeteksi = digitalRead(pirPin);
+  
+  // Baca sensor DHT22
+  float humidity = dht.readHumidity();
+  float temperature = dht.readTemperature();
+  
+  // Kontrol LED berdasarkan PIR
+  if (gerakanTerdeteksi == HIGH && statusGerakanSebelumnya == LOW) {
+    lampuNyala = !lampuNyala;
+    digitalWrite(ledPin, lampuNyala ? HIGH : LOW);
+    
+    // Tampilkan pesan PIR di LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("PIR MENDETEKSI");
+    lcd.setCursor(0, 1);
+    if (lampuNyala) {
+      lcd.print("MENGHIDUPKAN LED");
+    } else {
+      lcd.print("MEMATIKAN LED");
+    }
+    
+    tampilkanPesanKhusus = true;
+    waktuTampilPesan = waktuSekarang;
+    
+    Serial.println(lampuNyala ? "💡 Lampu MENYALA" : "🔌 Lampu MATI");
+  }
+  
+  // Kontrol servo berdasarkan suhu
+  if (temperature > SUHU_BATAS && !jendelaTerbuka) {
+    // Suhu di atas 32°C dan jendela masih tertutup
+    myServo.write(SERVO_TERBUKA);
+    jendelaTerbuka = true;
+    
+    // Tampilkan pesan suhu tinggi di LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("SUHU TINGGI");
+    lcd.setCursor(0, 1);
+    lcd.print("BUKA JENDELA");
+    
+    tampilkanPesanKhusus = true;
+    waktuTampilPesan = waktuSekarang;
+    
+    Serial.println("🌡️ SUHU TINGGI! Jendela TERBUKA");
+  } 
+  else if (temperature <= SUHU_BATAS && jendelaTerbuka) {
+    // Suhu di bawah atau sama dengan 32°C dan jendela masih terbuka
+    myServo.write(SERVO_TERTUTUP);
+    jendelaTerbuka = false;
+    
+    // Tampilkan pesan suhu normal di LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("SUHU NORMAL");
+    lcd.setCursor(0, 1);
+    lcd.print("TUTUP JENDELA");
+    
+    tampilkanPesanKhusus = true;
+    waktuTampilPesan = waktuSekarang;
+    
+    Serial.println("❄️ Suhu normal - Jendela TERTUTUP");
+  }
+  
+  // Kelola tampilan LCD
+  if (tampilkanPesanKhusus) {
+    // Cek apakah waktu pesan khusus sudah habis
+    if (waktuSekarang - waktuTampilPesan >= DURASI_PESAN) {
+      tampilkanPesanKhusus = false;
+      waktuTerakhirUpdate = waktuSekarang; // Reset timer untuk halaman normal
+    }
+  } else {
+    // Tampilan normal - berganti halaman setiap 3 detik
+    if (waktuSekarang - waktuTerakhirUpdate >= INTERVAL_UPDATE) {
+      if (halamanLCD == 1) {
+        // Halaman 1: Info utama
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("  SMART HOME    ");
+        lcd.setCursor(0, 1);
+        lcd.print("LAMPU DAN JENDELA");
+        halamanLCD = 2;
+      } else {
+        // Halaman 2: Status sensor
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        if (gerakanTerdeteksi) {
+          lcd.print("PIR: ADA GERAKAN");
+        } else {
+          lcd.print("PIR: TDK GERAKAN");
+        }
+        lcd.setCursor(0, 1);
+        lcd.print("DHT: ");
+        lcd.print(temperature, 1);
+        lcd.print("C ");
+        halamanLCD = 1;
+      }
+      waktuTerakhirUpdate = waktuSekarang;
+    }
+  }
+  
+  // Simpan status untuk loop berikutnya
+  statusGerakanSebelumnya = gerakanTerdeteksi;
+  suhuSebelumnya = temperature;
+  
+  // Serial monitor output
+  Serial.print("Gerakan: ");
+  Serial.print(gerakanTerdeteksi ? "TERDETEKSI" : "TIDAK ADA");
+  Serial.print(" | Suhu: ");
+  Serial.print(temperature);
+  Serial.println(" C");
+  
+  delay(200); // Delay kecil untuk stabilitas
+}
