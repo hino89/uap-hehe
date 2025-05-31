@@ -1,0 +1,28 @@
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Alamat I2C 0x27, LCD 16x2
+
+
+#defien soilMoisture_Pin A0
+
+
+void setup() {
+  Serial.begin(9600);
+  lcd.begin(16, 2);
+  lcd.clear();
+}
+
+void loop() {
+  int soilMoistureValue = soilMioistureSensor();
+
+  lcd.setCursor(0, 0);
+  lcd.print("Kelembapan tanah : " + soilMoistureValue);
+
+}
+
+
+int soilMioistureSensor() {
+  int sensorValue = analogRead(sensorPin);  // Read the analog value from sensor
+  int outputValue = map(sensorValue, 0, 1023, 255, 0); // map the 10-bit data to 8-bit data
+  analogWrite(ledPin, outputValue); // generate PWM signal
+  return outputValue;             // Return analog moisture value
+}
